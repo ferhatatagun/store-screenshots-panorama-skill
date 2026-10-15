@@ -1,0 +1,392 @@
+<!doctype html>
+<!--
+  Panorama template. Copy it to {out}/.src/panorama.html, then edit.
+  All measurements are design pixels on a 1290-wide canvas; render.mjs passes ?w=&h=&theme=&device= and the page
+  scales itself. Each <section class="shot"> is one image; their order is the image order. The background shapes
+  (svg.bg) and direct children of .pano use panorama coordinates (x: 0 … n×1290), so anything that crosses a seam
+  continues in the neighbouring image by itself. Things inside a section use that image's coordinates.
+-->
+<html lang="en" data-theme="light">
+<!-- Set lang to the headline language (e.g. "tr") so uppercase and line breaking follow its rules. -->
+<head>
+<meta charset="utf-8">
+<title>panorama</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=block">
+<style>
+/* ---------- 1. Palette: derive it from the app's colours (roles: references/style.md §1) ---------- */
+:root {
+  --A: #E6C177;                         /* the app's accent colour */
+  --A-deep: #9A6719; --A-light: #BC8931; /* accent background; white headlines need at least 3:1 */
+  --A-ink: #A16E1C;                     /* headline on the second background; aim for 4.5:1 on white */
+  --G1: #FFE7A3; --G2: #F6B443; --G3: #EC7A3C;  /* 3D object faces and card frames: light, vivid tones of A */
+  --S1: #C9802A; --S2: #B4561F;         /* 3D object side walls (depth) */
+  --SH: #3A1D05;                        /* 3D object ground shadow */
+  --P1: #FFF4B8; --P2: #FFD23F; --P3: #F5A31C; --PS1: #D08A12; --PS2: #B86E0C;  /* yellow sparkles */
+  --K-top: #12121F; --K: #1A1A2E; --K-surface: #26263E;  /* dark theme background and surface */
+  --font: -apple-system, "SF Pro Display", "Inter", system-ui, sans-serif;
+}
+html[data-theme="light"] {
+  --A-zone-deep: var(--A-deep); --A-zone-light: var(--A-light);
+  --bg2: #FFFFFF; --bg2-paint: #FFFFFF;
+  --on-A: #FFFFFF; --on-2: var(--A-ink);
+  --rim1: #6A7183; --rim2: #202635; --rim3: #B5BBD2;
+  --surface: #FFFFFF; --chip-ink: var(--A-ink);
+  --card-shadow: 0 30px 80px rgba(0,0,0,.18); --card-edge: 0 0 0 0 transparent;
+  --phone-shadow: drop-shadow(0 40px 60px rgba(0,0,0,.22));
+  --dim: .5; --spot-glow: rgba(255,255,255,.6);
+  --obj-filter: none;
+}
+html[data-theme="dark"] {
+  --bg2: var(--K); --bg2-paint: linear-gradient(180deg, var(--K-top), var(--K));
+  /* In the dark theme the accent regions are not A but a dark tone of K with a little A mixed in, so the set stays
+     dark-dominant and A only shines in headlines, 3D objects and frames. A's share of the mix, in percent: */
+  --dark-tint-deep: 8; --dark-tint-light: 16;
+  --on-A: var(--A);             /* checked by the script; white if A falls short */
+  --on-2: var(--A);
+  --rim1: #5B5E66; --rim2: #C9CBD2; --rim3: #8E9099;
+  --surface: var(--K-surface); --chip-ink: var(--A);
+  --card-shadow: 0 0 80px color-mix(in srgb, var(--A) 25%, transparent); --card-edge: 0 0 0 1px rgba(255,255,255,.12);
+  --phone-shadow: drop-shadow(0 0 70px color-mix(in srgb, var(--A) 22%, transparent));
+  --dim: .45; --spot-glow: color-mix(in srgb, var(--A) 60%, transparent);
+  --obj-filter: drop-shadow(0 0 40px color-mix(in srgb, var(--A) 40%, transparent));
+}
+
+/* ---------- 2. Layout (measured values; don't change) ---------- */
+/* Only html clips (it propagates to the viewport). If body clipped, outputs wider than 1290 would lose the bottom
+   and right edge of the scaled panorama at its unscaled size. */
+html { overflow: hidden; background: var(--bg2); }
+body { margin: 0; background: var(--bg2); }
+.pano { position: relative; width: calc(var(--n, 1) * 1290px); height: var(--hd, 2796px); transform-origin: 0 0;
+        background: var(--bg2-paint); overflow: hidden; font-family: var(--font); -webkit-font-smoothing: antialiased; }
+.bg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.bg .fill-A { fill: url(#gA); }
+.bg .fill-2 { fill: var(--bg2); }
+.shot { position: absolute; top: 0; left: calc(var(--i, 0) * 1290px); width: 1290px; height: 100%; }
+
+/* Headline: cap top of the first line at y≈150, 148/166px, weight 800, at most 1160px wide */
+.hl { position: absolute; left: 65px; top: 119px; width: 1160px; margin: 0; z-index: 8; text-align: center;
+      font: 800 148px/166px var(--font); letter-spacing: -.01em; }
+.hl.on-A { color: var(--on-A); }
+.hl.on-2 { color: var(--on-2); }
+
+/* Device: position and size come from the DEVICES table in the script (render.mjs --device). Rim 20 + bezel 21 px.
+   iphone:    outer 966×1999 @ (158,696), radius 180 → screen 884 wide, radius 140
+   duo-outer: outer 884×1249 @ (203,568), radius 150 (design height ≈1877)
+   duo-inner: outer 884×1222 @ (203,552), radius 120 (design height ≈1834) */
+.phone { position: absolute; left: var(--dev-x, 158px); top: var(--dev-y, 696px); width: var(--dev-w, 966px); height: var(--dev-h, 1999px);
+         box-sizing: border-box; padding: 20px;
+         border-radius: var(--dev-r, 180px); z-index: 2; filter: var(--phone-shadow);
+         background: linear-gradient(135deg, var(--rim3), var(--rim1) 18%, var(--rim2) 46%, var(--rim1) 74%, var(--rim3));
+         box-shadow: inset 0 0 0 2px rgba(255,255,255,.35), inset 0 0 0 5px rgba(20,24,34,.55); }
+.phone::before { content: ""; position: absolute; left: -7px; top: 380px; width: 9px; height: 510px; border-radius: 4px;
+                 background: linear-gradient(var(--rim1) 0 96px, transparent 96px 180px, var(--rim1) 180px 330px,
+                                             transparent 330px 360px, var(--rim1) 360px 510px); }
+.phone::after { content: ""; position: absolute; right: -7px; top: 620px; width: 9px; height: 230px; border-radius: 4px;
+                background: var(--rim1); }
+.bezel { width: 100%; height: 100%; box-sizing: border-box; padding: 21px; border-radius: calc(var(--dev-r, 180px) - 20px); background: #000; }
+.screen { position: relative; width: 100%; height: 100%; border-radius: calc(var(--dev-r, 180px) - 41px); overflow: hidden; background: #000; }
+.screen > img { display: block; width: 100%; }
+.screen::after { content: ""; position: absolute; top: 24px; left: 50%; width: 276px; height: 82px; margin-left: -138px;
+                 border-radius: 41px; background: #000; z-index: 3; }
+.phone.dim .screen::before { content: ""; position: absolute; inset: 0; background: #000; opacity: var(--dim); z-index: 2; }
+/* iPhone Duo: the camera, hinge and button positions are not verified, so they are not drawn (plain frame) */
+html[data-device^="duo"] .phone::before, html[data-device^="duo"] .phone::after,
+html[data-device^="duo"] .screen::after { display: none; }
+
+/* A part cropped from the raw screenshot. The script computes its position, size and rotation:
+   data-crop="x,y,w,h" (raw px), data-center="cx,cy" (design px), data-scale (× its size inside the phone),
+   data-spot (in place, above the dimming), data-rot (degrees), data-r (corner radius, raw px) */
+.crop { position: absolute; overflow: hidden; z-index: 5; border-radius: 40px; background: var(--surface);
+        box-shadow: var(--card-edge), var(--card-shadow); }
+.crop.framed { border: 14px solid transparent;
+               background: linear-gradient(var(--surface), var(--surface)) padding-box,
+                           linear-gradient(180deg, var(--G1), var(--G2) 55%, var(--G3)) border-box; }
+.crop.spot { box-shadow: 0 0 60px var(--spot-glow); }
+.crop.flat { box-shadow: var(--card-edge); }
+/* For cards side by side, like a grid, keep shadows off the neighbouring card: give the cards .flat and put a
+   .shadow-box of the same size under each one */
+.shadow-box { position: absolute; z-index: 4; border-radius: 40px; box-shadow: var(--card-shadow); }
+.crop.inline { position: relative; box-shadow: none; background: none; margin: 0 auto; }
+
+/* Feature chip: an icon from the screen (inline crop) + 1–2 words */
+.chip { position: absolute; z-index: 7; width: 400px; height: 360px; box-sizing: border-box; padding-top: 74px; border-radius: 56px;
+        background: var(--surface); box-shadow: var(--card-edge), var(--card-shadow); text-align: center;
+        font: 800 56px var(--font); letter-spacing: -.01em; color: var(--chip-ink); }
+.chip .crop { margin-bottom: 34px; }
+
+/* 3D object (puffy, glossy). <div class="obj" data-shape="crescent" data-at="x,y" data-size="420" data-rot="30"></div>
+   data-shape: crescent, star, sparkle, bubble, play, note, heart, orb — or data-path="..." (in a 200×200 box)
+   data-cols="spark" for the yellow sparkle palette; data-depth, data-blur to fine-tune; data-front="68%" for the hero */
+.obj { position: absolute; z-index: 6; filter: var(--obj-filter); }
+.obj.back { z-index: 1; }
+.obj.hero { z-index: 1; }
+.obj-front { z-index: 6; }
+.obj svg { display: block; overflow: visible; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <!-- Don't use display:none: Chrome doesn't paint gradients from a hidden svg -->
+  <defs>
+    <linearGradient id="gA" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="420" y2="2796">
+      <stop offset="0" style="stop-color:var(--A-zone-deep)"/><stop offset="1" style="stop-color:var(--A-zone-light)"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<main class="pano">
+  <!-- ---------- 3. Background: panorama coordinates (width n×1290, height = the design height) ----------
+       Two ways: accent regions on the second background (class="fill-A"), or an all-accent strip (rect.fill-A) with
+       second-background shapes on top (class="fill-2"). Shapes may come from context (e.g. a huge disc as the moon).
+       Rules: large curves, the headline zone (y 0–650) on one colour, accent share 25–75% per image. -->
+  <svg class="bg" preserveAspectRatio="none">
+    <rect class="fill-A" x="0" y="0" width="100%" height="100%"/>
+    <circle class="fill-2" cx="700" cy="2400" r="1420"/>
+    <path class="fill-2" d="M2580,-20 L3870,-20 L3870,1760 C3290,1760 2580,1450 2580,650 Z"/>
+  </svg>
+
+  <!-- ---------- 4. Images ----------
+       The data-crop, data-center and colour values below are EXAMPLES ONLY: measure every crop with grid.mjs.
+       data-raw and img src paths are relative to this HTML file (e.g. <out>/.src/ → ../../raw/…). -->
+
+  <!-- Hero: no device. The app's symbol is a giant 3D object with the app's own cards in its hollow.
+       data-front="68% [angle] [band]": redraws the object from this percentage on (direction 180deg = down by default,
+       fade band 5% by default) in front of the cards. Where the cards cross the rim, the band must end above the rim;
+       otherwise the card looks like it is dissolving instead of tucked behind the edge. Only the cards' corners should
+       go behind the rim. The hero object may run into image 2, but must not land on a card or text there. -->
+  <section class="shot" data-raw="../../raw/02.png">
+    <h1 class="hl on-A">Example four<br>line promise<br>headline<br>goes here</h1>
+    <div class="obj hero" data-shape="crescent" data-at="560,1780" data-size="1900" data-rot="10"
+         data-front="68%"></div>
+    <div class="crop" data-crop="36,1173,549,474" data-center="420,1440" data-scale="1.2" data-rot="-8" data-r="57"></div>
+    <div class="crop" data-crop="621,1683,549,474" data-center="905,1320" data-scale="1.2" data-rot="8" data-r="57"></div>
+    <div class="obj" data-shape="star" data-at="1080,2470" data-size="300" data-rot="20"></div>
+  </section>
+
+  <!-- Standard: device + dimming + pop-out (framed) card + spotlight -->
+  <section class="shot" data-raw="../../raw/01.png">
+    <h1 class="hl on-A">Short benefit<br>headline</h1>
+    <div class="phone dim"><div class="bezel"><div class="screen"><img src="../../raw/01.png"></div></div></div>
+    <div class="crop spot" data-crop="36,804,1134,450" data-spot data-r="57"></div>
+    <div class="crop framed" data-crop="36,1296,1134,631" data-center="645,1850" data-scale="1.35" data-r="57"></div>
+  </section>
+
+  <!-- Standard: pop-out card + feature chip -->
+  <section class="shot" data-raw="../../raw/03.png">
+    <h1 class="hl on-2">Second example<br>headline</h1>
+    <div class="phone dim"><div class="bezel"><div class="screen"><img src="../../raw/03.png"></div></div></div>
+    <div class="crop" data-crop="36,577,1134,248" data-center="645,1800" data-scale="1.35" data-r="57"></div>
+    <div class="chip" style="left:40px; top:560px"><div class="crop inline" data-crop="75,635,132,132" data-scale="1.35" data-r="66"></div>Short label</div>
+  </section>
+
+  <!-- 3D objects on the seams (panorama coordinates: x = the seam itself, a multiple of 1290) -->
+  <div class="obj" data-shape="sparkle" data-cols="spark" data-at="1290,2560" data-size="230"></div>
+  <div class="obj" data-shape="star" data-at="2580,700" data-size="400" data-rot="-18"></div>
+
+  <!-- Other layouts (copy into a section):
+    2×2 card grid: four separate crops, data-scale 1.25–1.35. The gaps between the cards should fall on parts of the
+      dimmed screen without text. Keep shadows off the neighbouring card: give the cards class="crop flat" and put a
+      <div class="shadow-box" style="left:…;top:…;width:…;height:…"></div> with the same position and size under each.
+    Fan: the middle card data-scale≈1.4 and style="z-index:6", the side ones ≈1.1, sticking out past the device's edges.
+  -->
+</main>
+
+<script>
+/* Runs synchronously: crop images are added to the DOM right away (they hold back the load event), and layout happens
+   on load. So everything is in place before Chrome takes the screenshot. */
+(() => {
+  const q = new URLSearchParams(location.search);
+  const W = +q.get('w') || 1290, H = +q.get('h') || 2796;
+  const root = document.documentElement;
+  if (q.get('theme')) root.dataset.theme = q.get('theme');
+  // Device geometry (design px, 1290 wide). Screen = outer − 2×41; the screen's ratio is the raw screenshot's ratio.
+  const DEVICES = {
+    'iphone':    { x: 158, y: 696, w: 966, h: 1999, r: 180 },
+    'duo-outer': { x: 203, y: 568, w: 884, h: 1249, r: 150 },   // screen 802×1167 (1398×2034 ratio)
+    'duo-inner': { x: 203, y: 552, w: 884, h: 1222, r: 120 },   // screen 802×1140 (2007×2853 ratio)
+  };
+  root.dataset.device = q.get('device') || root.dataset.device || 'iphone';
+  const dev = DEVICES[root.dataset.device];
+  if (!dev) console.error('Error: unknown device ' + root.dataset.device);
+  for (const [key, v] of Object.entries(dev)) root.style.setProperty('--dev-' + key, v + 'px');
+  // Dark theme: accent regions = a mix of K and A (a dark tone tinted with A), ratio from --dark-tint-*
+  if (root.dataset.theme === 'dark') {
+    const css0 = getComputedStyle(root);
+    const hx = n => (/#([0-9a-f]{6})/i.exec(css0.getPropertyValue(n)) || [])[1];
+    const mix = (a, b, t) => '#' + [0, 2, 4].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * t + parseInt(b.slice(i, i + 2), 16) * (1 - t))
+                                       .toString(16).padStart(2, '0')).join('');
+    const A0 = hx('--A'), K0 = hx('--K');
+    if (A0 && K0) {
+      root.style.setProperty('--A-zone-deep', mix(A0, K0, (+css0.getPropertyValue('--dark-tint-deep') || 8) / 100));
+      root.style.setProperty('--A-zone-light', mix(A0, K0, (+css0.getPropertyValue('--dark-tint-light') || 16) / 100));
+    }
+  }
+  const pano = document.querySelector('.pano');
+  const shots = [...pano.querySelectorAll('.shot')];
+  const k = W / 1290;
+  shots.forEach((s, i) => s.style.setProperty('--i', i));
+  pano.style.setProperty('--n', shots.length);
+  pano.style.setProperty('--hd', (H / k) + 'px');
+  pano.style.transform = `scale(${k})`;
+  const bg = pano.querySelector('svg.bg');
+  // Background shapes are drawn at the design height: iPhone ≈2800, duo-outer ≈1877, duo-inner ≈1834
+  if (bg && !bg.getAttribute('viewBox')) bg.setAttribute('viewBox', `0 0 ${shots.length * 1290} ${Math.round(H / k)}`);
+
+  // ---------- 3D objects: puffy, glossy SVG (extrusion layers + lighting filter) ----------
+  const f1 = v => v.toFixed(1);
+  function crescentPath(cx, cy, r1, dx, dy, r2) {
+    const d = Math.hypot(dx, dy), a = (r1 * r1 - r2 * r2 + d * d) / (2 * d), h = Math.sqrt(Math.max(r1 * r1 - a * a, 0));
+    const ux = dx / d, uy = dy / d, px = cx + a * ux, py = cy + a * uy;
+    const t1 = [px + h * uy, py - h * ux], t2 = [px - h * uy, py + h * ux];
+    return `M${f1(t1[0])},${f1(t1[1])} A${r1},${r1} 0 1 0 ${f1(t2[0])},${f1(t2[1])} A${r2},${r2} 0 1 1 ${f1(t1[0])},${f1(t1[1])} Z`;
+  }
+  function starPath(cx, cy, ro, ri, n = 5) {
+    const pts = [];
+    for (let i = 0; i < n * 2; i++) { const r = i % 2 ? ri : ro, a = (-90 + i * 180 / n) * Math.PI / 180; pts.push(`${f1(cx + r * Math.cos(a))},${f1(cy + r * Math.sin(a))}`); }
+    return 'M' + pts.join(' L') + ' Z';
+  }
+  function sparklePath(cx, cy, r, pinch = .16) {
+    const kk = r * pinch, p = [[cx, cy - r], [cx + r, cy], [cx, cy + r], [cx - r, cy]], c = [[cx + kk, cy - kk], [cx + kk, cy + kk], [cx - kk, cy + kk], [cx - kk, cy - kk]];
+    let d = `M${p[0][0]},${p[0][1]} `;
+    for (let i = 0; i < 4; i++) d += `Q${f1(c[i][0])},${f1(c[i][1])} ${p[(i + 1) % 4][0]},${p[(i + 1) % 4][1]} `;
+    return d + 'Z';
+  }
+  const circle = (cx, cy, r) => `M${cx - r},${cy} A${r},${r} 0 1 0 ${cx + r},${cy} A${r},${r} 0 1 0 ${cx - r},${cy} Z`;
+  const ellipse = (cx, cy, rx, ry) => `M${cx - rx},${cy} A${rx},${ry} 0 1 0 ${cx + rx},${cy} A${rx},${ry} 0 1 0 ${cx - rx},${cy} Z`;
+  const SHAPES = {   // all in a 200×200 box
+    crescent: { d: crescentPath(100, 100, 92, 40, -24, 76), round: 8 },
+    star:     { d: starPath(100, 106, 84, 40), round: 18 },
+    sparkle:  { d: sparklePath(100, 100, 92), round: 6 },
+    bubble:   { d: 'M52,24 H148 A40,40 0 0 1 188,64 V108 A40,40 0 0 1 148,148 H84 C74,157 62,180 56,188 C55,181 60,160 44,148 H52 A40,40 0 0 1 12,108 V64 A40,40 0 0 1 52,24 Z' },
+    play:     { d: circle(100, 100, 88) + ` M75,66 L122,100 L75,134 Z`, rule: 'evenodd' },
+    note:     { d: [ellipse(54, 152, 30, 22), ellipse(142, 132, 30, 22), 'M70,60 H84 V152 H70 Z', 'M158,40 H172 V132 H158 Z', 'M70,48 L172,24 L172,54 L70,78 Z'].join(' '), round: 10 },
+    heart:    { d: 'M100,186 C40,140 4,104 4,64 C4,30 30,8 60,8 C80,8 93,20 100,34 C107,20 120,8 140,8 C170,8 196,30 196,64 C196,104 160,140 100,186 Z' },
+    orb:      { d: circle(100, 100, 92) },
+  };
+  let uid = 0;
+  function puffy(shape, size, el, front = false) {
+    const kk = size / 200, id = p => p + (++uid);
+    const g = id('g'), s = id('s'), f = id('f'), h = id('h');
+    const depth = +el.dataset.depth || Math.round(size * .06);
+    const blur = +el.dataset.blur || Math.max(size * .05, 8);
+    const spark = el.dataset.cols === 'spark';
+    const [c1, c2, c3, s1, s2] = spark ? ['--P1', '--P2', '--P3', '--PS1', '--PS2'] : ['--G1', '--G2', '--G3', '--S1', '--S2'];
+    const rule = shape.rule || 'nonzero', round = shape.round || 0;
+    const path = fill => `<path d="${shape.d}" transform="scale(${kk})" fill-rule="${rule}" style="fill:${fill}${round ? `;stroke:${fill};stroke-width:${round};stroke-linejoin:round` : ''}"/>`;
+    // no ground shadow on the front copy: painted twice, it leaves a line at the mask edge
+    let layers = front ? '' : `<g filter="url(#${h})" opacity=".35" transform="translate(${f1(depth * .5)},${f1(depth * 1.6)})">${path('var(--SH)')}</g>`;
+    for (let i = depth; i > 0; i--) layers += `<g transform="translate(${f1(i * .35)},${i})">${path(`url(#${s})`)}</g>`;
+    layers += `<g filter="url(#${f})">${path(`url(#${g})`)}</g>`;
+    const sb = Math.max(blur * .06, 1.5);
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><defs>
+      <linearGradient id="${g}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(${c1})"/><stop offset=".5" style="stop-color:var(${c2})"/><stop offset="1" style="stop-color:var(${c3})"/></linearGradient>
+      <linearGradient id="${s}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(${s1})"/><stop offset="1" style="stop-color:var(${s2})"/></linearGradient>
+      <filter id="${h}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${f1(blur * 1.4)}"/></filter>
+      <filter id="${f}" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="${f1(blur)}" result="b"/>
+        <feSpecularLighting in="b" surfaceScale="${f1(blur * .9)}" specularConstant="1.05" specularExponent="22" lighting-color="#fff" result="sp"><feDistantLight azimuth="225" elevation="38"/></feSpecularLighting>
+        <feGaussianBlur in="sp" stdDeviation="${f1(sb)}" result="sp2"/>
+        <feComposite in="sp2" in2="SourceAlpha" operator="in" result="spi"/>
+        <feDiffuseLighting in="b" surfaceScale="${f1(blur * .9)}" diffuseConstant="1.15" lighting-color="#fff" result="df"><feDistantLight azimuth="225" elevation="52"/></feDiffuseLighting>
+        <feGaussianBlur in="df" stdDeviation="${f1(sb)}" result="df2"/>
+        <feComposite in="df2" in2="SourceAlpha" operator="in" result="dfi"/>
+        <feBlend in="SourceGraphic" in2="dfi" mode="multiply" result="sh"/>
+        <feComposite in="sh" in2="SourceGraphic" operator="arithmetic" k1="0" k2=".55" k3=".45" k4="0" result="mix"/>
+        <feComposite in="spi" in2="mix" operator="arithmetic" k1="0" k2=".85" k3="1" k4="0" result="lit"/>
+        <feComposite in="lit" in2="SourceAlpha" operator="in"/>
+      </filter></defs>${layers}</svg>`;
+  }
+  for (const el of document.querySelectorAll('.obj')) {
+    const shape = el.dataset.path ? { d: el.dataset.path, round: +el.dataset.round || 0, rule: el.dataset.rule } : SHAPES[el.dataset.shape];
+    if (!shape) { console.warn('WARN: unknown 3D shape: ' + el.dataset.shape); continue; }
+    const size = +el.dataset.size || 400;
+    const [x, y] = (el.dataset.at || '0,0').split(',').map(Number);
+    Object.assign(el.style, { left: (x - size / 2) + 'px', top: (y - size / 2) + 'px', width: size + 'px', height: size + 'px',
+                              transform: `rotate(${+el.dataset.rot || 0}deg)` });
+    el.innerHTML = puffy(shape, size, el);
+    if (el.dataset.front) {
+      const front = el.cloneNode(false);
+      front.className = 'obj obj-front';
+      front.removeAttribute('data-front');
+      // a hard clip-path edge leaves a thin line between the two copies; a soft mask hides it
+      const [pct, angle = '180deg', band = '5%'] = el.dataset.front.split(/\s+/);
+      const p0 = parseFloat(pct), b = parseFloat(band);
+      front.style.maskImage = front.style.webkitMaskImage = `linear-gradient(${angle}, transparent ${p0}%, #000 ${p0 + b}%)`;
+      front.innerHTML = puffy(shape, size, el, true);   // with new ids
+      el.after(front);
+    }
+  }
+
+  // ---------- Crops ----------
+  const crops = [...document.querySelectorAll('[data-crop]')];
+  for (const el of crops) {
+    const src = el.dataset.src || el.closest('.shot')?.dataset.raw;
+    if (!src) { console.warn('WARN: data-crop without data-raw or data-src'); continue; }
+    const img = document.createElement('img');
+    img.className = 'crop-img';
+    img.src = src;
+    img.style.cssText = 'position:absolute; max-width:none; display:block';
+    el.prepend(img);
+  }
+
+  function place() {
+    const SX = dev.x + 41, SY = dev.y + 41, SW = dev.w - 82;
+    for (const el of crops) {
+      const img = el.querySelector(':scope > img.crop-img');
+      if (!img) continue;
+      const rw = img.naturalWidth, rh = img.naturalHeight;
+      if (!rw) { console.warn('WARN: crop image failed to load: ' + img.src); continue; }
+      const [x, y, w, h] = el.dataset.crop.split(',').map(Number);
+      if (x < 0 || y < 0 || x + w > rw || y + h > rh) console.warn(`WARN: crop ${el.dataset.crop} runs outside the raw screenshot (${rw}×${rh})`);
+      const kScreen = SW / rw;
+      const spot = 'spot' in el.dataset;
+      const s = spot ? kScreen : kScreen * (+el.dataset.scale || 1.35);
+      const border = el.classList.contains('framed') ? 14 : 0;
+      el.style.width = w * s + 'px';
+      el.style.height = h * s + 'px';
+      if (el.dataset.r) el.style.borderRadius = (+el.dataset.r * s + border) + 'px';
+      img.style.left = (-x * s) + 'px';
+      img.style.top = (-y * s) + 'px';
+      img.style.width = (rw * s) + 'px';
+      if (el.dataset.rot) el.style.transform = `rotate(${el.dataset.rot}deg)`;
+      if (el.classList.contains('inline')) continue;
+      let left, top;
+      if (spot) { left = SX + x * s; top = SY + y * s; }
+      else { const [cx, cy] = (el.dataset.center || `645,${Math.round(dev.y + dev.h * .55)}`).split(',').map(Number); left = cx - w * s / 2; top = cy - h * s / 2; }
+      el.style.left = (left - border) + 'px';
+      el.style.top = (top - border) + 'px';
+    }
+  }
+
+  // ---------- Contrast (headlines are 148px / 800: at least 3:1) ----------
+  function contrast() {
+    const css = getComputedStyle(root);
+    const hex = name => { const m = /#([0-9a-f]{6})/i.exec(css.getPropertyValue(name)); return m ? m[1] : null; };
+    const lum = h => { const c = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+                         .map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+                       return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, r) => r - p); return (x + .05) / (y + .05); };
+    const dark = root.dataset.theme === 'dark';
+    const A = hex('--A'), Ad = hex(dark ? '--A-zone-deep' : '--A-deep'), Al = hex(dark ? '--A-zone-light' : '--A-light'), K = hex('--K'), ink = hex('--A-ink');
+    if (!(A && Ad && Al && K && ink)) return;
+    // light theme: white on the accent; dark theme: A, or white if A falls short
+    const onA = dark && Math.min(ratio(A, Ad), ratio(A, Al)) >= 3 ? A : 'FFFFFF';
+    root.style.setProperty('--on-A', '#' + onA);
+    const worst = Math.min(ratio(onA, Ad), ratio(onA, Al));
+    if (worst < 3) console.warn(`WARN: headline contrast on the accent is ${worst.toFixed(2)}:1 (<3); adjust ${dark ? '--dark-tint-*' : '--A-deep/--A-light'}.`);
+    const [txt, bgc] = dark ? [A, K] : [ink, 'FFFFFF'];
+    if (ratio(txt, bgc) < 3) console.warn(`WARN: headline contrast on the ${dark ? 'dark' : 'white'} background is ${ratio(txt, bgc).toFixed(2)}:1 (<3); adjust ${dark ? '--A' : '--A-ink'}.`);
+  }
+
+  window.addEventListener('load', () => {
+    try {
+      contrast();
+      place();
+      for (const i of document.images) if (!i.naturalWidth) console.warn('WARN: image failed to load: ' + i.src);
+      document.body.dataset.ready = '1';
+    } catch (e) { console.error('Error: ' + e.message); }
+  });
+})();
+</script>
+</body>
+</html>

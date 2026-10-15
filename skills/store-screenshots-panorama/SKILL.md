@@ -1,6 +1,6 @@
 ---
 name: store-screenshots-panorama
-description: Make finished App Store screenshot sets from raw screenshots — brand-colour gradient and white (or a dark-dominant dark theme) flowing as one panorama across the images, big centred heavy headlines, a device at a fixed spot with its screen dimmed while a cropped part pops out past it, and glossy puffy 3D objects from the app's own context (a crescent and stars for a prayer app, speech bubbles for a subtitle app) on the seams, with a phone-less hero where the app's symbol is a giant 3D object holding its own UI cards. Covers every required iPhone size (6.9" and 6.3") and the iPhone Duo outer and inner displays, in light and dark, rendered with an HTML template and headless Chrome; the UI stays pixel-exact. Use when the user asks for App Store / store screenshots, iPhone Duo screenshots, or a dark-theme screenshot set from raw screenshot folders, or names this skill. Produces the sets directly, with no plan files or approval stops.
+description: Make finished App Store screenshot sets from raw screenshots — brand-colour gradient and white (or a dark-dominant dark theme) flowing as one panorama across the images, big centred heavy headlines, a device at a fixed spot with its screen dimmed while a cropped part pops out past it, and glossy puffy 3D objects from the app's own context (a crescent and stars for a prayer app, speech bubbles for a subtitle app) on the seams, with a phone-less hero where the app's symbol is a giant 3D object holding its own UI cards. Covers every required iPhone size (6.9" and 6.3") and the iPhone Duo outer and inner displays, in light and dark (from light- and dark-mode screenshots if given), rendered with an HTML template and headless Chrome; the UI stays pixel-exact. Use when the user asks for App Store / store screenshots, iPhone Duo screenshots, or a dark-theme screenshot set from raw screenshot folders, or names this skill. Produces the sets directly, with no plan files or approval stops.
 license: MIT
 ---
 
@@ -36,8 +36,8 @@ is no sensible default — for example, ask for larger originals if the raw scre
 ## Inputs and defaults
 | Input | Default |
 |---|---|
-| iPhone raw screenshots | `raw/` (1206×2622 or larger) |
-| Duo raw screenshots | `raw-duo-outer/` (outer display) and `raw-duo-inner/` (inner display), same order and file names. Without them, no Duo sets are made. |
+| iPhone raw screenshots | `raw/` (1206×2622 or larger), shown in both themes. Or `raw-light/` and `raw-dark/`: the app in light and in dark mode, same file names and sizes; each theme then shows its own (`style.md` §9). |
+| Duo raw screenshots | `raw-duo-outer/` (outer display) and `raw-duo-inner/` (inner display), same order and file names; per appearance `raw-duo-outer-light/`, `raw-duo-outer-dark/` and so on. Without them, no Duo sets are made. |
 | Output folder | `out/` |
 | Device sets | iPhone 6.9" (1320×2868) and 6.3" (1206×2622): both are needed (`style.md` §4). With Duo screenshots, Duo outer (1398×2034) and inner (2007×2853). |
 | Language | The raw screenshots' language. Headlines are written per language; crops are measured from that language's screenshots. |
@@ -55,8 +55,8 @@ them; if anything would clash, pick a new subfolder and say so.
   hero, copy tone, dark theme, iPhone Duo.
 - `assets/panorama.html`: the template. Device frames (iPhone, Duo outer, Duo inner), headline, crops (pop-out card,
   spotlight, frame, chip), dimming, puffy 3D objects (`.obj`: crescent, star, sparkle, bubble, play, note, heart, orb, or
-  your own path) and the hero object are ready; the layout measurements are fixed. Copy it and edit only the palette,
-  the background shapes and the images.
+  your own path), the hero object and per-theme raw folders (`RAW`) are ready; the layout measurements are fixed. Copy
+  it and edit only the palette, the background shapes, the images and `RAW`.
 - `scripts/render.mjs`: slices the panorama into PNGs.
   `node <skill>/scripts/render.mjs <panorama.html> --out <dir> --theme light|dark --device iphone|duo-outer|duo-inner [--size WxH] [--preview <png>] [--only 2,5] [--no-slices]`.
   Each device's default size is one App Store Connect accepts; for iPhone the default is 6.9", pass
@@ -76,6 +76,8 @@ SF Pro Display on macOS and Inter (Google Fonts) elsewhere.
    Pick the accent (A): the colour of buttons, the selected tab or the logo. Derive the palette from A as in
    `style.md` §1. To sample colours, use `magick <png> -format "%[hex:p{x,y}]" info:` or the grid image.
    Check whether the Duo folders exist and have the right sizes (`style.md` §10).
+   Check which raw folders exist and pick each theme's folder (`style.md` §9). With light and dark folders, check that
+   they hold the same file names at the same pixel sizes and show the same state (content, scroll position, time).
 2. **Plan the set in your head; don't write it down.** Order: the hero, then the screens in order of value. For each
    image, decide: the headline, the colour of the headline zone (A or the second background, in groups of 2–3), the
    main highlight technique and the part to crop. Whatever part proves the screen's point is the main highlight. Then
@@ -83,8 +85,12 @@ SF Pro Display on macOS and Inter (Google Fonts) elsewhere.
 3. **Measure the crops.** Run `grid.mjs` for each part, look at the image, try the box with `--box`, and look again.
    The box should hug the element with a little air, not cut text, and not take in neighbouring UI. Measure the card's
    corner radius too (`data-r`). Measure the Duo crops separately, from their own raw files.
+   Measure on the light screenshots. With a dark folder, try the same boxes on the dark ones too
+   (`grid.mjs raw-dark/02.png --box …`): the crops are shared, so they must hug the same element in both.
 4. **Build the iPhone panorama.** Copy `assets/panorama.html` to `<out>/.src/panorama.html`:
    - Change the palette in `:root`.
+   - Set `RAW` in the script: `{ light: 'raw-light', dark: 'raw-dark' }` with two folders, `{ light: 'raw', dark: 'raw' }`
+     with one. Write every path with the light folder; the dark render swaps it.
    - Write a `<section class="shot">` for each image. Give `data-raw` for the crops; paths are relative to the `.src`
      folder the HTML is in (`../../raw/…` when the output is `out/`, `../../../raw/…` for `out/x/`).
      The crop and colour values in the template are only examples; measure all of them for this app.
@@ -94,7 +100,8 @@ SF Pro Display on macOS and Inter (Google Fonts) elsewhere.
    - Delete the example sections and objects.
 5. **Build the Duo panoramas** (if there are Duo screenshots). Copy the iPhone panorama to
    `.src/panorama-duo-outer.html` and `.src/panorama-duo-inner.html` and adapt them as in `style.md` §10: the same
-   headlines, palette and symbols; new crops; cards, objects and background shapes laid out again for the design height.
+   headlines, palette and symbols; new crops; cards, objects and background shapes laid out again for the design height;
+   `RAW` set to the Duo folders (e.g. `{ light: 'raw-duo-outer-light', dark: 'raw-duo-outer-dark' }`).
 6. **Render.** One run per theme and device (for dark, `--theme dark` and `dark`):
    ```
    R=<skill>/scripts/render.mjs; S=<out>/.src; O=<out>/<lang>/light
@@ -110,7 +117,8 @@ SF Pro Display on macOS and Inter (Google Fonts) elsewhere.
    again. Don't deliver an image you haven't looked at: a shifted crop, a curve behind a headline or an object covering
    a card only shows in the picture. The 6.3" set is the 6.9" set scaled down; looking at one is enough, but check the
    file count and size of both.
-8. **Deliver.** Briefly give the folders, the device sets, the number of images and each image's headline. If no Duo
+8. **Deliver.** Briefly give the folders, the device sets, the number of images, each image's headline and which raw
+   folder each theme used. If a dark screenshot showed a different state, name the screens to retake. If no Duo
    sets were made, say why and what needs to be captured. Mention that changing the copy only takes editing the HTML
    in `.src/` and running the commands from step 6.
 
@@ -146,6 +154,8 @@ measurements of that set:
 - Is the symbol recognisable on the hero? Do the cards sit inside it or in front of it?
 - Is the dark theme dark-dominant (no large flat A area; A only in headlines, objects and frames)? Do the device rim,
   cards and objects stand out from the background? Is the layout the same in both themes?
+- With dark-mode screenshots: does the dark set show the dark UI in the device and in every crop, and the light set the
+  light UI? Does each shared crop show the same element in both?
 - In the Duo sets, does every screen come from a Duo raw screenshot? Do the cards, objects and background shapes fit
   the short Duo canvas; is the bottom of the device or any card cut off? Does the side tab and status bar survive the
   crops correctly?

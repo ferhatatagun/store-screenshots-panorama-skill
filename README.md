@@ -21,7 +21,7 @@ resized and cropped; the background, headlines, device frames and 3D objects are
   subject (a crescent and stars for a prayer app, speech bubbles and notes for a subtitle app) and placed on the seams.
 - **A hero first.** No phone: the app's symbol as a giant 3D object holding the app's own UI cards.
 - **Light and a real dark theme.** The dark theme is dark-dominant: accent colour only in headlines, objects and
-  frames.
+  frames. Give it your app's dark-mode screenshots and the dark set shows the dark UI.
 - **Every required size.** iPhone 6.9" (1320×2868) and 6.3" (1206×2622), plus iPhone Duo outer (1398×2034) and inner
   (2007×2853) when Duo screenshots are provided. Output is PNG without alpha.
 
@@ -50,6 +50,10 @@ Make App Store screenshots from the screens in raw/, light and dark.
 The agent derives the palette, headlines and 3D symbols from the screenshots and produces the sets directly — no plan
 files or approval stops. Output lands in `out/<lang>/<theme>/<device>/01.png …`, with the editable source HTML in
 `out/.src/` so you can change a headline and render again.
+
+If your app has a dark mode, put the light-mode screenshots in `raw-light/` and the dark-mode ones in `raw-dark/`,
+with the same names. The light set then shows the light UI and the dark set the dark UI. With a single `raw/` folder,
+both sets use the same screenshots.
 
 For iPhone Duo, add screenshots from the iPhone Duo simulator (Xcode 27.1) in `raw-duo-outer/` and `raw-duo-inner/`,
 with the same names as in `raw/`. App Store Connect requires Duo screenshots from April 2027 for apps built with the

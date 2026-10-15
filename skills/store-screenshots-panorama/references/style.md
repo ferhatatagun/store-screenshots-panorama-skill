@@ -195,6 +195,7 @@ colour in A's hue with 8–12% lightness.
 
 | Element | Light theme | Dark theme |
 |---|---|---|
+| Screenshots | `raw-light/` (or `raw/`) | `raw-dark/` if given, otherwise the same as the light theme |
 | Second background | White | K (a little darker at the top, vertical gradient) |
 | Accent regions | A gradient | K + 8–16% A (`--dark-tint-deep` / `--dark-tint-light`, computed by the template). Higher ratios turn warm A and cool K into a muddy brown; lower ones make the flow invisible. |
 | Headlines | White on the accent, `--A-ink` on white | `--A` everywhere (the template switches to white if contrast is too low) |
@@ -209,6 +210,20 @@ colour in A's hue with 8–12% lightness.
   file is rendered twice; layout, curves, headlines and crops stay the same, only colour and light change.
 - Check the dark theme: is any large flat A area left in the preview? There shouldn't be. The hero's 3D symbol may stay
   in A; it is an object, not background.
+
+**Dark-mode screenshots.** If the app has a dark mode and the user gives both appearances, each theme shows its own:
+the dark set shows the app as dark-mode users see it, and no white screen becomes the brightest thing in a dark image.
+- Folders: `raw-light/` and `raw-dark/` (or `raw/` and `raw-dark/`), with the same file names and pixel sizes. Each
+  theme takes `raw-<theme>/` if it exists, otherwise `raw/`, otherwise the other theme's folder; with only one folder,
+  both themes show it. Duo works the same way: `raw-duo-outer-light/`, `raw-duo-outer-dark/`, `raw-duo-inner-…`.
+- In the template, set `RAW` to the two folder names and write every path with the light one. For `--theme dark`, the
+  script swaps that folder for the dark one in every `img src`, `data-raw` and `data-src`. It reports a missing dark
+  screenshot, or one of a different size, as `WARN:`.
+- The crops are measured once, on the light screenshots, and shared. That only holds if both appearances show the same
+  state: the same content, scroll position and time. Try the boxes on the dark screenshots too. If one shows something
+  else, the crop will too; name the screen to retake at delivery.
+- A dark UI on K: the cards keep their 1px light edge and the glow in A. Check that the device's screen and the cards
+  still separate from the background in the dark images.
 
 ## 10. iPhone Duo
 Verified from Apple's sources (screenshot specifications and the HIG page "Designing for iPhone Duo", October 2026):
@@ -227,7 +242,8 @@ from Apple Design Resources, use that.
 **Raw screenshots.** Duo sets are made only from screenshots taken on Duo, because the UI is different (side bars, two
 panes).
 - Take them in the iPhone Duo simulator in Xcode 27.1, separately for each display (Simulator → File → Save Screen).
-- Put them in `raw-duo-outer/` and `raw-duo-inner/`, in the same order and with the same names as the iPhone ones.
+- Put them in `raw-duo-outer/` and `raw-duo-inner/`, in the same order and with the same names as the iPhone ones
+  (per appearance `raw-duo-outer-light/`, `raw-duo-outer-dark/` and so on, §9).
 - Check the size. The ratio must match 1398×2034 (outer) or 2007×2853 (inner). The template scales another resolution
   with the same ratio; if the ratio differs, ask the user.
 - If there are no Duo screenshots, produce the iPhone sets and say at delivery: Duo sets become required from April 2027

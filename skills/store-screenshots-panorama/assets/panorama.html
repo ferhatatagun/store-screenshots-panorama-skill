@@ -147,7 +147,8 @@ html[data-device^="duo"] .screen::after { display: none; }
 
   <!-- ---------- 4. Images ----------
        The data-crop, data-center and colour values below are EXAMPLES ONLY: measure every crop with grid.mjs.
-       data-raw and img src paths are relative to this HTML file (e.g. <out>/.src/ → ../../raw/…). -->
+       data-raw and img src paths are relative to this HTML file (e.g. <out>/.src/ → ../../raw/…) and name the RAW.light
+       folder (set RAW in the script); the dark render swaps it for RAW.dark. -->
 
   <!-- Hero: no device. The app's symbol is a giant 3D object with the app's own cards in its hollow.
        data-front="68% [angle] [band]": redraws the object from this percentage on (direction 180deg = down by default,
@@ -199,6 +200,21 @@ html[data-device^="duo"] .screen::after { display: none; }
   const W = +q.get('w') || 1290, H = +q.get('h') || 2796;
   const root = document.documentElement;
   if (q.get('theme')) root.dataset.theme = q.get('theme');
+  // Raw folders per theme (style.md §9). Every path in this file names RAW.light; for the dark theme the script swaps
+  // that folder for RAW.dark in each img src, data-raw and data-src. With one folder for both themes, set both the same.
+  const RAW = { light: 'raw', dark: 'raw' };
+  const rawPairs = new Map();   // dark path → light path: crops are measured once, so both screenshots must match in size
+  if (root.dataset.theme === 'dark' && RAW.dark !== RAW.light) {
+    const swap = p => p.split('/').map(seg => seg === RAW.light ? RAW.dark : seg).join('/');
+    const set = (get, put) => { const a = get(), b = a && swap(a); if (b && b !== a) { rawPairs.set(b, a); put(b); } };
+    for (const img of document.querySelectorAll('img[src]')) set(() => img.getAttribute('src'), v => img.setAttribute('src', v));
+    for (const el of document.querySelectorAll('[data-raw], [data-src]'))
+      for (const key of ['raw', 'src']) set(() => el.dataset[key], v => { el.dataset[key] = v; });
+    const refs = document.createElement('div');   // the light screenshots, loaded only for the size check
+    refs.hidden = true;
+    for (const p of new Set(rawPairs.values())) { const i = new Image(); i.src = p; refs.append(i); }
+    document.body.append(refs);
+  }
   // Device geometry (design px, 1290 wide). Screen = outer − 2×41; the screen's ratio is the raw screenshot's ratio.
   const DEVICES = {
     'iphone':    { x: 158, y: 696, w: 966, h: 1999, r: 180 },
@@ -378,9 +394,19 @@ html[data-device^="duo"] .screen::after { display: none; }
     if (ratio(txt, bgc) < 3) console.warn(`WARN: headline contrast on the ${dark ? 'dark' : 'white'} background is ${ratio(txt, bgc).toFixed(2)}:1 (<3); adjust ${dark ? '--A' : '--A-ink'}.`);
   }
 
+  function rawSizes() {
+    const size = p => { const i = [...document.images].find(im => im.getAttribute('src') === p);
+                        return i && i.naturalWidth ? i.naturalWidth + '×' + i.naturalHeight : null; };
+    for (const [dark, light] of rawPairs) {
+      const d = size(dark), l = size(light);
+      if (d && l && d !== l) console.warn(`WARN: ${dark} is ${d} but ${light} is ${l}; the crops are measured on the light screenshot, so the dark one must be the same size`);
+    }
+  }
+
   window.addEventListener('load', () => {
     try {
       contrast();
+      rawSizes();
       place();
       for (const i of document.images) if (!i.naturalWidth) console.warn('WARN: image failed to load: ' + i.src);
       document.body.dataset.ready = '1';
